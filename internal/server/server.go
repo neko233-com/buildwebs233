@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/neko233-com/buildwebs233/internal/config"
 	"github.com/neko233-com/buildwebs233/internal/hotreload"
+	"github.com/neko233-com/buildwebs233/internal/platform"
 	"github.com/neko233-com/buildwebs233/internal/store"
 )
 
@@ -53,7 +54,11 @@ func (a *App) RegisterRoutes(r chi.Router) {
 	r.Get("/api/reload", a.handleReloadSSE)
 	r.Get("/api/pages", a.handleListPages)
 	r.Get("/api/pages/{id}", a.handleGetPage)
+	r.Get("/api/sites", a.handleListSites)
+	r.Get("/api/sites/{id}", a.handleGetSite)
+	r.Get("/api/sites/{id}/pages", a.handleListSitePages)
 	r.Get("/api/templates", a.handleListTemplates)
+	r.Get("/api/platform/roadmap", a.handleRoadmap)
 	r.Get("/__reload-client.js", a.handleReloadClient)
 
 	r.Post("/api/login", a.handleLogin)
@@ -63,6 +68,7 @@ func (a *App) RegisterRoutes(r chi.Router) {
 		r.Use(a.authMiddleware)
 		r.Post("/pages", a.handleSavePage)
 		r.Delete("/pages/{id}", a.handleDeletePage)
+		r.Post("/sites", a.handleSaveSite)
 	})
 
 	r.Get("/admin", a.handleAdminStatic)
@@ -134,6 +140,11 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleListPages(w http.ResponseWriter, r *http.Request) {
+	siteID := strings.TrimSpace(r.URL.Query().Get("site_id"))
+	if siteID != "" {
+		a.writeJSON(w, http.StatusOK, a.store.ListPagesBySite(siteID))
+		return
+	}
 	pages := a.store.ListPages()
 	a.writeJSON(w, http.StatusOK, pages)
 }
@@ -148,6 +159,30 @@ func (a *App) handleGetPage(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, p)
 }
 
+func (a *App) handleListSites(w http.ResponseWriter, r *http.Request) {
+	sites := a.store.ListSites()
+	a.writeJSON(w, http.StatusOK, sites)
+}
+
+func (a *App) handleGetSite(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	site, ok := a.store.GetSiteByID(id)
+	if !ok {
+		a.writeError(w, http.StatusNotFound, "site not found")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, site)
+}
+
+func (a *App) handleListSitePages(w http.ResponseWriter, r *http.Request) {
+	siteID := chi.URLParam(r, "id")
+	if _, ok := a.store.GetSiteByID(siteID); !ok {
+		a.writeError(w, http.StatusNotFound, "site not found")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, a.store.ListPagesBySite(siteID))
+}
+
 func (a *App) handleSavePage(w http.ResponseWriter, r *http.Request) {
 	var in store.Page
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -156,10 +191,28 @@ func (a *App) handleSavePage(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := a.store.UpsertPage(in)
 	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusBadRequest, "site not found for page")
+			return
+		}
 		a.writeError(w, http.StatusInternalServerError, "save page failed")
 		return
 	}
 	a.reloadHub.Broadcast(hotreload.Event{Type: "html", File: "/p/" + saved.Slug})
+	a.writeJSON(w, http.StatusOK, saved)
+}
+
+func (a *App) handleSaveSite(w http.ResponseWriter, r *http.Request) {
+	var in store.Site
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid site payload")
+		return
+	}
+	saved, err := a.store.UpsertSite(in)
+	if err != nil {
+		a.writeError(w, http.StatusInternalServerError, "save site failed")
+		return
+	}
 	a.writeJSON(w, http.StatusOK, saved)
 }
 
@@ -176,6 +229,10 @@ func (a *App) handleDeletePage(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	templates := a.store.ListTemplates()
 	a.writeJSON(w, http.StatusOK, templates)
+}
+
+func (a *App) handleRoadmap(w http.ResponseWriter, r *http.Request) {
+	a.writeJSON(w, http.StatusOK, platform.DefaultRoadmap())
 }
 
 func (a *App) handleRenderPage(w http.ResponseWriter, r *http.Request) {
@@ -287,20 +344,29 @@ func renderHTML(p store.Page) string {
 	var b strings.Builder
 	b.WriteString("<!doctype html><html><head><meta charset='utf-8'/>")
 	b.WriteString("<meta name='viewport' content='width=device-width, initial-scale=1' />")
-	b.WriteString("<title>" + html.EscapeString(p.Title) + "</title>")
+	b.WriteString("<title>" + html.EscapeString(orDefault(p.SEO.Title, p.Title)) + "</title>")
+	if strings.TrimSpace(p.SEO.Description) != "" {
+		b.WriteString("<meta name='description' content='" + html.EscapeString(p.SEO.Description) + "' />")
+	}
 	b.WriteString("<style>body{margin:0;font-family:Arial,\"Noto Sans SC\";background:#f8fafc;color:#111827;} .hero{padding:40px;text-align:center;background:#0f172a;color:white;} .section{padding:24px;max-width:980px;margin:0 auto;} .block{margin:12px 0;padding:16px;border:1px solid #e2e8f0;border-radius:10px;background:white;box-shadow:0 6px 20px rgba(0,0,0,.08);} .btn{display:inline-block;padding:10px 14px;border-radius:8px;background:#0ea5e9;color:white;text-decoration:none;}</style>")
 	b.WriteString("<script src='/__reload-client.js'></script>")
 	b.WriteString("</head><body>")
 	b.WriteString("<div class='hero'><h1>" + html.EscapeString(orDefault(p.Title, p.Name)) + "</h1></div>")
-	for _, block := range p.Blocks {
-		switch strings.ToLower(block.Type) {
-		case "text":
-			b.WriteString("<div class='section block'>" + html.EscapeString(block.Content) + "</div>")
-		case "button":
-			b.WriteString("<div class='section'><a class='btn' href='#'>" + html.EscapeString(block.Content) + "</a></div>")
-		default:
-			b.WriteString("<div class='section block'>" + html.EscapeString(block.Content) + "</div>")
+	for _, section := range p.Sections {
+		b.WriteString("<section class='section'>")
+		for _, block := range section.Blocks {
+			switch strings.ToLower(block.Type) {
+			case "text":
+				b.WriteString("<div class='block'>" + html.EscapeString(orDefault(block.Props["text"], block.Content)) + "</div>")
+			case "button":
+				b.WriteString("<div><a class='btn' href='#'>" + html.EscapeString(orDefault(block.Props["label"], block.Content)) + "</a></div>")
+			case "hero":
+				b.WriteString("<div class='block'><strong>" + html.EscapeString(orDefault(block.Props["headline"], block.Content)) + "</strong></div>")
+			default:
+				b.WriteString("<div class='block'>" + html.EscapeString(orDefault(block.Props["text"], block.Content)) + "</div>")
+			}
 		}
+		b.WriteString("</section>")
 	}
 	b.WriteString("</body></html>")
 	return b.String()

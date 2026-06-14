@@ -112,4 +112,3 @@ func ReloadClientScript() string {
   });
 })();`
 }
-

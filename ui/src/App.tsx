@@ -3,27 +3,78 @@ import { useEffect, useMemo, useState } from "react";
 type Block = {
   id: string;
   type: "text" | "button" | "hero";
-  content: string;
+  label?: string;
+  content?: string;
+  props?: Record<string, string>;
+};
+
+type Section = {
+  id: string;
+  name: string;
+  layout: string;
+  blocks: Block[];
 };
 
 type Page = {
   id: string;
+  site_id: string;
   name: string;
   slug: string;
   title: string;
-  blocks: Block[];
+  status: string;
+  template_id?: string;
+  schema_version?: number;
+  sections: Section[];
+};
+
+type Site = {
+  id: string;
+  name: string;
+  domain: string;
+  region: string;
+  template_id: string;
+  primary_page_id?: string;
+  status: string;
+  icp_number?: string;
+  psb_number?: string;
+  compliance?: {
+    company_name?: string;
+    contact_name?: string;
+    contact_phone?: string;
+    icp_status?: string;
+    psb_status?: string;
+    review_status?: string;
+  };
+};
+
+type RoadmapFeature = {
+  id: string;
+  name: string;
+  summary: string;
+  value: string;
+  phase: string;
+  status: string;
+};
+
+type Roadmap = {
+  product: string;
+  vision: string;
+  recommended: RoadmapFeature[];
 };
 
 const builtinBlocks: Block[] = [
-  { id: "b1", type: "text", content: "主标题" },
-  { id: "b2", type: "text", content: "正文说明" },
-  { id: "b3", type: "button", content: "按钮" },
-  { id: "b4", type: "hero", content: "Hero 区" },
+  { id: "b1", type: "text", label: "主标题", props: { text: "主标题" } },
+  { id: "b2", type: "text", label: "正文说明", props: { text: "正文说明" } },
+  { id: "b3", type: "button", label: "按钮", props: { label: "立即咨询" } },
+  { id: "b4", type: "hero", label: "Hero 区", props: { headline: "这是 Hero 区" } },
 ];
 
 export default function App() {
   const [pages, setPages] = useState<Page[]>([]);
   const [draft, setDraft] = useState<Block[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
+  const [activeSiteId, setActiveSiteId] = useState("site-default");
 
   const previewHTML = useMemo(() => {
     if (draft.length === 0) {
@@ -32,19 +83,25 @@ export default function App() {
     return draft
       .map((b) => {
         if (b.type === "button") {
-          return `<a class='preview-btn'>${b.content}</a>`;
+          return `<a class='preview-btn'>${b.props?.label ?? b.label ?? "按钮"}</a>`;
         }
         if (b.type === "hero") {
-          return `<div class='preview-hero'>${b.content}</div>`;
+          return `<div class='preview-hero'>${b.props?.headline ?? b.label ?? "Hero"}</div>`;
         }
-        return `<p>${b.content}</p>`;
+        return `<p>${b.props?.text ?? b.label ?? "文本"}</p>`;
       })
       .join("");
   }, [draft]);
 
   useEffect(() => {
     loadPages().then(setPages).catch(() => setPages([]));
+    loadSites().then(setSites).catch(() => setSites([]));
+    loadRoadmap().then(setRoadmap).catch(() => setRoadmap(null));
   }, []);
+
+  useEffect(() => {
+    loadPages(activeSiteId).then(setPages).catch(() => setPages([]));
+  }, [activeSiteId]);
 
   const onDrop = (block: Block) => {
     setDraft((prev) => [...prev, { ...block, id: `${block.id}-${Date.now()}` }]);
@@ -63,10 +120,20 @@ export default function App() {
       });
     const payload: Page = {
       id: "",
+      site_id: activeSiteId,
       name: "新建页面",
       slug: "",
       title: "新建页面",
-      blocks: draft,
+      status: "draft",
+      schema_version: 2,
+      sections: [
+        {
+          id: `section-${Date.now()}`,
+          name: "主区域",
+          layout: "stack",
+          blocks: draft,
+        },
+      ],
     };
     let res = await doSave();
     if (res.status === 401) {
@@ -81,8 +148,54 @@ export default function App() {
     if (!res.ok) {
       return;
     }
-    await loadPages();
+    setDraft([]);
+    await loadPages(activeSiteId).then(setPages);
   };
+
+  const createSiteSkeleton = async () => {
+    const payload: Site = {
+      id: "",
+      name: `备案企业站 ${sites.length + 1}`,
+      domain: "",
+      region: "CN",
+      template_id: "tpl-hero",
+      status: "planning",
+      compliance: {
+        icp_status: "not_started",
+        psb_status: "not_started",
+        review_status: "draft",
+      },
+    };
+
+    let res = await fetch("/api/admin/sites", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) {
+      await fetch("/api/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "root", password: "root" }),
+      });
+      res = await fetch("/api/admin/sites", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    if (!res.ok) {
+      return;
+    }
+    const nextSites = await loadSites();
+    setSites(nextSites);
+    setActiveSiteId(nextSites[0]?.id ?? activeSiteId);
+  };
+
+  const activeSite = sites.find((site) => site.id === activeSiteId) ?? null;
 
   return (
     <main className="shell">
@@ -94,34 +207,95 @@ export default function App() {
             className="block-item"
             onClick={() => onDrop(block)}
           >
-            {block.content}
+            {block.label}
           </button>
         ))}
       </section>
       <section className="canvas">
-        <h2>画布</h2>
+        <div className="panel-head">
+          <h2>画布</h2>
+          <select
+            value={activeSiteId}
+            onChange={(event) => setActiveSiteId(event.target.value)}
+          >
+            {sites.map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="frame" dangerouslySetInnerHTML={{ __html: previewHTML }} />
         <button onClick={saveDraft}>保存页面</button>
+        <p className="muted">当前页面将保存到站点：{activeSite?.name ?? "默认企业站"}</p>
+      </section>
+      <section className="sites">
+        <div className="panel-head">
+          <h2>站点中心</h2>
+          <button onClick={createSiteSkeleton}>创建站点骨架</button>
+        </div>
+        <ul>
+          {sites.map((site) => (
+            <li key={site.id} className="site-item">
+              <strong>{site.name}</strong>
+              <span>{site.region}</span>
+              <span>{site.status}</span>
+              <span>ICP备案: {site.compliance?.icp_status ?? "not_started"}</span>
+              <span>公安备案: {site.compliance?.psb_status ?? "not_started"}</span>
+            </li>
+          ))}
+        </ul>
       </section>
       <section className="list">
-        <h2>已建页面</h2>
+        <h2>页面与路线</h2>
         <ul>
           {pages.map((item) => (
             <li key={item.id}>
               {item.name}
               <span>{` /${item.slug}`}</span>
+              <span>{item.status}</span>
             </li>
           ))}
         </ul>
+        <div className="roadmap">
+          <h3>{roadmap?.product} 路线</h3>
+          <p>{roadmap?.vision}</p>
+          {(roadmap?.recommended ?? []).slice(0, 5).map((feature) => (
+            <article key={feature.id} className="feature-card">
+              <header>
+                <strong>{feature.name}</strong>
+                <span>{feature.phase}</span>
+              </header>
+              <p>{feature.summary}</p>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );
 }
 
-async function loadPages(): Promise<Page[]> {
-  const res = await fetch("/api/pages");
+async function loadPages(siteId?: string): Promise<Page[]> {
+  const query = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+  const res = await fetch(`/api/pages${query}`);
   if (!res.ok) {
     return [];
   }
   return (await res.json()) as Page[];
+}
+
+async function loadSites(): Promise<Site[]> {
+  const res = await fetch("/api/sites");
+  if (!res.ok) {
+    return [];
+  }
+  return (await res.json()) as Site[];
+}
+
+async function loadRoadmap(): Promise<Roadmap | null> {
+  const res = await fetch("/api/platform/roadmap");
+  if (!res.ok) {
+    return null;
+  }
+  return (await res.json()) as Roadmap;
 }

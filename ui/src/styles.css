@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
 body {
@@ -11,12 +11,12 @@ body {
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: 260px 1fr 320px 320px;
   gap: 12px;
   padding: 16px;
 }
 
-.palette, .canvas, .list {
+.palette, .canvas, .list, .sites {
   border: 1px solid #334155;
   background: rgba(15, 23, 42, 0.7);
   border-radius: 12px;
@@ -27,6 +27,11 @@ body {
   display: block;
   width: 100%;
   margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  border-radius: 10px;
+  color: #e2e8f0;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(15, 23, 42, 0.65));
 }
 
 .frame {
@@ -36,6 +41,56 @@ body {
   background: #ffffff;
   color: #111827;
   padding: 12px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-head select,
+.canvas button,
+.sites button {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+}
+
+.site-item,
+.feature-card {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.site-item span,
+.feature-card span {
+  display: inline-block;
+  margin-right: 8px;
+  color: #7dd3fc;
+  font-size: 12px;
+}
+
+.feature-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roadmap p {
+  color: #cbd5e1;
+}
+
+.muted {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .preview-btn {
@@ -58,4 +113,3 @@ body {
     grid-template-columns: 1fr;
   }
 }
-

@@ -15,10 +15,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host               string `yaml:"host"`
-	Port               int    `yaml:"port"`
-	StaticDir          string `yaml:"static_dir"`
-	ViteDevURL         string `yaml:"vite_dev_url"`
+	Host                string `yaml:"host"`
+	Port                int    `yaml:"port"`
+	StaticDir           string `yaml:"static_dir"`
+	ViteDevURL          string `yaml:"vite_dev_url"`
 	ReadTimeoutSeconds  int    `yaml:"read_timeout_seconds"`
 	WriteTimeoutSeconds int    `yaml:"write_timeout_seconds"`
 }
@@ -31,6 +31,7 @@ type AuthConfig struct {
 type StorageConfig struct {
 	DataDir       string `yaml:"data_dir"`
 	PagesFile     string `yaml:"pages_file"`
+	SitesFile     string `yaml:"sites_file"`
 	TemplatesFile string `yaml:"templates_file"`
 }
 
@@ -56,10 +57,10 @@ func Load(path string) (Config, error) {
 func defaultConfig() Config {
 	return Config{
 		Server: ServerConfig{
-			Host:               "0.0.0.0",
-			Port:               6640,
-			StaticDir:          "web",
-			ViteDevURL:         "http://127.0.0.1:5173",
+			Host:                "0.0.0.0",
+			Port:                6640,
+			StaticDir:           "web",
+			ViteDevURL:          "http://127.0.0.1:5173",
 			ReadTimeoutSeconds:  30,
 			WriteTimeoutSeconds: 30,
 		},
@@ -70,6 +71,7 @@ func defaultConfig() Config {
 		Storage: StorageConfig{
 			DataDir:       "data",
 			PagesFile:     "pages.json",
+			SitesFile:     "sites.json",
 			TemplatesFile: "templates.json",
 		},
 		HotReload: HotReloadConfig{
@@ -110,6 +112,9 @@ func (c *Config) fillDefaults() {
 	if c.Storage.PagesFile == "" {
 		c.Storage.PagesFile = d.Storage.PagesFile
 	}
+	if c.Storage.SitesFile == "" {
+		c.Storage.SitesFile = d.Storage.SitesFile
+	}
 	if c.Storage.TemplatesFile == "" {
 		c.Storage.TemplatesFile = d.Storage.TemplatesFile
 	}
@@ -134,3 +139,6 @@ func (c *Config) TemplatesPath() string {
 	return c.Storage.DataDir + "/" + c.Storage.TemplatesFile
 }
 
+func (c *Config) SitesPath() string {
+	return c.Storage.DataDir + "/" + c.Storage.SitesFile
+}

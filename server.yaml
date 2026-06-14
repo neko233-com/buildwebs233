@@ -13,6 +13,7 @@ auth:
 storage:
   data_dir: "data"
   pages_file: "pages.json"
+  sites_file: "sites.json"
   templates_file: "templates.json"
 
 hot_reload:
@@ -22,4 +23,3 @@ hot_reload:
     - "data/pages.json"
     - "data/templates.json"
     - "ui/src"
-

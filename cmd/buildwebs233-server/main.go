@@ -8,10 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -60,9 +60,10 @@ func main() {
 	defer cancel()
 
 	if cfg.HotReload.Enabled {
-		paths := make([]string, 0, len(cfg.HotReload.WatchPath)+2)
+		paths := make([]string, 0, len(cfg.HotReload.WatchPath)+3)
 		paths = append(paths, cfg.HotReload.WatchPath...)
 		paths = append(paths, cfg.PagesPath(), cfg.TemplatesPath())
+		paths = append(paths, cfg.SitesPath())
 		startWatcher(ctx, cfgManager, hub, paths)
 	}
 
