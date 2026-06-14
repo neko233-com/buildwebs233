@@ -1,0 +1,25 @@
+server:
+  host: "0.0.0.0"
+  port: 6640
+  static_dir: "web"
+  vite_dev_url: "http://127.0.0.1:5173"
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
+
+auth:
+  username: "root"
+  password: "root"
+
+storage:
+  data_dir: "data"
+  pages_file: "pages.json"
+  templates_file: "templates.json"
+
+hot_reload:
+  enabled: true
+  watch_paths:
+    - "server.yaml"
+    - "data/pages.json"
+    - "data/templates.json"
+    - "ui/src"
+

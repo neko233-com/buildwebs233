@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            archive: tar.gz
+            binary: buildwebs233-server
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            archive: zip
+            binary: buildwebs233-server.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Build binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/${{ matrix.binary }} ./cmd/buildwebs233-server
+
+      - name: Stage release payload
+        shell: bash
+        run: |
+          mkdir -p package
+          cp README.md package/README.md
+          cp server.yaml package/server.yaml
+          cp dist/${{ matrix.binary }} package/${{ matrix.binary }}
+
+      - name: Archive Linux asset
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          tar -czf buildwebs233-server-linux-amd64.tar.gz -C package .
+
+      - name: Archive Windows asset
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path package\* -DestinationPath buildwebs233-server-windows-amd64.zip -Force
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.tar.gz
+            *.zip

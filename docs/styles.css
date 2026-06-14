@@ -1,0 +1,132 @@
+:root {
+  --bg: #f5efe4;
+  --ink: #1f2937;
+  --deep: #0f172a;
+  --brand: #d97706;
+  --brand-dark: #9a3412;
+  --line: rgba(15, 23, 42, 0.14);
+  --card: rgba(255, 255, 255, 0.82);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(217, 119, 6, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(15, 23, 42, 0.15), transparent 30%),
+    linear-gradient(160deg, #fff8ee, var(--bg));
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.hero,
+.doc-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 20px 28px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--brand-dark);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(36px, 6vw, 72px);
+  line-height: 0.98;
+}
+
+.lead {
+  max-width: 760px;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.actions a,
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: white;
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  box-shadow: 0 16px 28px rgba(154, 52, 18, 0.2);
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 20px 48px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card,
+.doc-card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+}
+
+.card h2,
+.doc-card h2 {
+  margin-top: 0;
+}
+
+ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+pre {
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--deep);
+  color: #f8fafc;
+}
+
+code {
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

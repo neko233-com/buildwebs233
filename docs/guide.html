@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>buildwebs233 快速开始</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="doc-shell">
+      <a class="back-link" href="./index.html">返回首页</a>
+      <h1>快速开始</h1>
+
+      <section class="doc-card">
+        <h2>本地开发</h2>
+        <pre><code>go run ./cmd/buildwebs233-server -config server.yaml</code></pre>
+        <pre><code>cd ui
+npm install
+npm run dev</code></pre>
+      </section>
+
+      <section class="doc-card">
+        <h2>默认登录信息</h2>
+        <p>后台地址：`http://127.0.0.1:6640/admin`</p>
+        <p>账号密码：`root / root`</p>
+      </section>
+
+      <section class="doc-card">
+        <h2>自动化流水线</h2>
+        <p>`CI` 工作流会自动执行 `go vet`、`go test ./...`、`npm run typecheck` 和 `npm run build`。</p>
+        <p>`Docs Pages` 会把 `docs/` 发布到 GitHub Pages。</p>
+        <p>`Release` 会在推送 `v*` tag 时生成 Windows 和 Linux 预编译包。</p>
+      </section>
+    </main>
+  </body>
+</html>

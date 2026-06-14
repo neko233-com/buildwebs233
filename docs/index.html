@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>buildwebs233 Docs</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <header class="hero">
+      <p class="eyebrow">buildwebs233</p>
+      <h1>Go 1.26 建站引擎与后台管理文档</h1>
+      <p class="lead">面向快速建站、模板复用、低代码编辑和中国地区备案流程的服务端平台。</p>
+      <div class="actions">
+        <a href="./guide.html">快速开始</a>
+        <a href="https://github.com/neko233-com/buildwebs233">GitHub 仓库</a>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <h2>核心能力</h2>
+        <ul>
+          <li>默认 `6640` 端口后台管理</li>
+          <li>`server.yaml` 配置与热重载</li>
+          <li>页面/模板文件化存储，可平滑迁移到数据库</li>
+          <li>SSE 驱动 HTML 与配置刷新</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>自动化</h2>
+        <ul>
+          <li>GitHub Actions 运行 `go vet`、`go test`、前端构建与工作流校验</li>
+          <li>GitHub Pages 自动发布文档站</li>
+          <li>Tag 发布自动打包 Linux/Windows 预构建二进制</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>扩展建议</h2>
+        <ul>
+          <li>多租户：`tenant_id` 隔离页面、模板、站点配置</li>
+          <li>模板市场：元数据入库，资源上 OSS/CDN</li>
+          <li>审核流：按地区接入备案材料与审批状态</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

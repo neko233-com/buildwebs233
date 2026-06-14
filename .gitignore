@@ -1,0 +1,9 @@
+/data/*
+!/data/.keep
+/web/*
+!/web/.keep
+/ui/node_modules
+/ui/dist
+/.cache
+/buildwebs233-server.exe
+/buildwebs233-server

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate GitHub Actions
+        shell: pwsh
+        run: ./scripts/validate-github-actions.ps1
+
+      - name: Download Go modules
+        run: go mod tidy
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm install
+
+      - name: UI typecheck
+        working-directory: ui
+        run: npm run typecheck
+
+      - name: UI build
+        working-directory: ui
+        run: npm run build
+
+      - name: Diff check
+        run: git diff --check
