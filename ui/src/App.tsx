@@ -45,6 +45,7 @@ type Site = {
     psb_status?: string;
     review_status?: string;
     materials?: ComplianceMaterial[];
+    review_history?: ComplianceEvent[];
   };
 };
 
@@ -56,11 +57,11 @@ type ComplianceMaterial = {
   status: string;
 };
 
-type PageRevision = {
+type ComplianceEvent = {
   id: string;
-  version: number;
-  status: string;
-  source: string;
+  action: string;
+  actor: string;
+  note?: string;
   created_at: string;
 };
 
@@ -93,8 +94,14 @@ export default function App() {
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [activeSiteId, setActiveSiteId] = useState("site-default");
   const [selectedTemplateId, setSelectedTemplateId] = useState("tpl-hero");
-  const [revisions, setRevisions] = useState<PageRevision[]>([]);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [templateConfig, setTemplateConfig] = useState({
+    siteName: "",
+    headline: "",
+    subheadline: "",
+    ctaLabel: "",
+  });
 
   const previewHTML = useMemo(() => {
     if (draft.length === 0) {
@@ -123,17 +130,20 @@ export default function App() {
     loadPages(activeSiteId).then(setPages).catch(() => setPages([]));
   }, [activeSiteId]);
 
-  useEffect(() => {
-    const primaryPageId = sites.find((site) => site.id === activeSiteId)?.primary_page_id;
-    if (!primaryPageId) {
-      setRevisions([]);
-      return;
-    }
-    loadPageRevisions(primaryPageId).then(setRevisions).catch(() => setRevisions([]));
-  }, [activeSiteId, sites]);
-
   const onDrop = (block: Block) => {
     setDraft((prev) => [...prev, { ...block, id: `${block.id}-${Date.now()}` }]);
+  };
+
+  const reorderDraft = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= draft.length) {
+      return;
+    }
+    setDraft((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
   };
 
   const saveDraft = async () => {
@@ -227,6 +237,19 @@ export default function App() {
   const activeSite = sites.find((site) => site.id === activeSiteId) ?? null;
   const activeSitePages = pages.filter((page) => page.site_id === activeSiteId);
 
+  useEffect(() => {
+    const primaryPage = activeSitePages.find((page) => page.id === activeSite?.primary_page_id) ?? activeSitePages[0];
+    const heroBlock = primaryPage?.sections?.[0]?.blocks?.find((block) => block.type === "hero");
+    const textBlock = primaryPage?.sections?.flatMap((section) => section.blocks).find((block) => block.type === "text");
+    const buttonBlock = primaryPage?.sections?.flatMap((section) => section.blocks).find((block) => block.type === "button");
+    setTemplateConfig({
+      siteName: activeSite?.name ?? "",
+      headline: heroBlock?.props?.headline ?? "",
+      subheadline: textBlock?.props?.text ?? "",
+      ctaLabel: buttonBlock?.props?.label ?? "",
+    });
+  }, [activeSiteId, activeSite?.name, activeSite?.primary_page_id, activeSitePages]);
+
   const applyTemplate = async () => {
     const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/apply-template`, {
       template_id: selectedTemplateId,
@@ -245,10 +268,7 @@ export default function App() {
     if (!res.ok) {
       return;
     }
-    await Promise.all([
-      loadPages(activeSiteId).then(setPages),
-      loadPageRevisions(activeSite.primary_page_id).then(setRevisions),
-    ]);
+    await loadPages(activeSiteId).then(setPages);
   };
 
   const setHomepage = async (pageId: string) => {
@@ -292,6 +312,72 @@ export default function App() {
     await loadSites().then(setSites);
   };
 
+  const saveTemplateConfig = async () => {
+    if (!activeSite) {
+      return;
+    }
+    await ensureAuth();
+    const siteRes = await fetch("/api/admin/sites", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...activeSite,
+        name: templateConfig.siteName || activeSite.name,
+      }),
+    });
+    if (!siteRes.ok) {
+      return;
+    }
+
+    const targetPage =
+      activeSitePages.find((page) => page.id === activeSite.primary_page_id) ?? activeSitePages[0];
+    if (!targetPage) {
+      await loadSites().then(setSites);
+      return;
+    }
+    const nextSections = targetPage.sections.map((section) => ({
+      ...section,
+      blocks: section.blocks.map((block) => {
+        if (block.type === "hero") {
+          return {
+            ...block,
+            props: { ...(block.props ?? {}), headline: templateConfig.headline || templateConfig.siteName },
+          };
+        }
+        if (block.type === "button") {
+          return {
+            ...block,
+            props: { ...(block.props ?? {}), label: templateConfig.ctaLabel || "立即咨询" },
+          };
+        }
+        if (block.type === "text") {
+          return {
+            ...block,
+            props: { ...(block.props ?? {}), text: templateConfig.subheadline || block.props?.text || "" },
+          };
+        }
+        return block;
+      }),
+    }));
+
+    const pageRes = await fetch("/api/admin/pages", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...targetPage,
+        name: templateConfig.siteName ? `${templateConfig.siteName} 首页` : targetPage.name,
+        title: templateConfig.siteName || targetPage.title,
+        sections: nextSections,
+      }),
+    });
+    if (!pageRes.ok) {
+      return;
+    }
+    await Promise.all([loadSites().then(setSites), loadPages(activeSiteId).then(setPages)]);
+  };
+
   return (
     <main className="shell">
       <section className="palette">
@@ -325,6 +411,29 @@ export default function App() {
           <button onClick={saveDraft}>保存页面</button>
           <button onClick={publishPrimaryPage}>发布首页</button>
         </div>
+        <div className="draft-list">
+          {draft.map((block, index) => (
+            <div
+              key={block.id}
+              className="draft-item"
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragIndex !== null) {
+                  reorderDraft(dragIndex, index);
+                }
+                setDragIndex(null);
+              }}
+            >
+              <strong>{block.label ?? block.type}</strong>
+              <div className="action-row">
+                <button onClick={() => reorderDraft(index, index - 1)}>上移</button>
+                <button onClick={() => reorderDraft(index, index + 1)}>下移</button>
+              </div>
+            </div>
+          ))}
+        </div>
         <p className="muted">当前页面将保存到站点：{activeSite?.name ?? "默认企业站"}</p>
       </section>
       <section className="sites">
@@ -352,6 +461,30 @@ export default function App() {
           ))}
         </ul>
         <div className="site-item">
+          <strong>模板配置面板</strong>
+          <input
+            value={templateConfig.siteName}
+            onChange={(event) => setTemplateConfig((prev) => ({ ...prev, siteName: event.target.value }))}
+            placeholder="站点名称"
+          />
+          <input
+            value={templateConfig.headline}
+            onChange={(event) => setTemplateConfig((prev) => ({ ...prev, headline: event.target.value }))}
+            placeholder="首页标题"
+          />
+          <input
+            value={templateConfig.subheadline}
+            onChange={(event) => setTemplateConfig((prev) => ({ ...prev, subheadline: event.target.value }))}
+            placeholder="首页说明"
+          />
+          <input
+            value={templateConfig.ctaLabel}
+            onChange={(event) => setTemplateConfig((prev) => ({ ...prev, ctaLabel: event.target.value }))}
+            placeholder="按钮文案"
+          />
+          <button onClick={saveTemplateConfig}>保存模板配置</button>
+        </div>
+        <div className="site-item">
           <strong>备案中心</strong>
           <div className="action-row">
             <button onClick={() => submitCompliance("submit")}>提交审核</button>
@@ -364,6 +497,13 @@ export default function App() {
               <a key={material.id} href={material.public_url} target="_blank" rel="noreferrer">
                 {material.file_name} / {material.status}
               </a>
+            ))}
+          </div>
+          <div className="materials history">
+            {(activeSite?.compliance?.review_history ?? []).map((event) => (
+              <span key={event.id}>
+                {event.action} / {event.actor} / {event.note || "-"}
+              </span>
             ))}
           </div>
         </div>
@@ -380,18 +520,6 @@ export default function App() {
             </li>
           ))}
         </ul>
-        <div className="roadmap revisions">
-          <h3>页面版本</h3>
-          {revisions.map((revision) => (
-            <article key={revision.id} className="feature-card">
-              <header>
-                <strong>v{revision.version}</strong>
-                <span>{revision.status}</span>
-              </header>
-              <p>{revision.source}</p>
-            </article>
-          ))}
-        </div>
         <div className="roadmap">
           <h3>{roadmap?.product} 路线</h3>
           <p>{roadmap?.vision}</p>
@@ -433,14 +561,6 @@ async function loadRoadmap(): Promise<Roadmap | null> {
     return null;
   }
   return (await res.json()) as Roadmap;
-}
-
-async function loadPageRevisions(pageId: string): Promise<PageRevision[]> {
-  const res = await fetch(`/api/pages/${pageId}/revisions`);
-  if (!res.ok) {
-    return [];
-  }
-  return (await res.json()) as PageRevision[];
 }
 
 async function ensureAuth(): Promise<void> {

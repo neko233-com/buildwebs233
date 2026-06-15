@@ -78,14 +78,18 @@
 - 模板一键套用与首页设置
   - `POST /api/admin/sites/{id}/apply-template`
   - `POST /api/admin/sites/{id}/homepage`
-- 页面版本快照与发布状态
-  - 保存页面自动生成 revision
-  - `GET /api/pages/{id}/revisions`
+- 轻量发布状态
   - `POST /api/admin/pages/{id}/publish`
+  - 内部保留 revision 仅作为操作快照，不作为重型版本控制产品能力暴露
 - 备案中心材料上传与审核流 API
   - `POST /api/admin/sites/{id}/compliance/materials`
   - `POST /api/admin/sites/{id}/compliance/review`
   - 上传文件落本地 `data/uploads/`
+
+当前前端体验已偏向“快速可用”：
+- 模板配置面板直接改首页标题、说明和按钮文案
+- 页面区块支持轻量拖拽排序与上下移动
+- 备案中心支持材料分类上传、审核意见和状态流转历史查看
 
 ## 文件说明
 - `server.yaml`：启动配置（账号密码、端口、监听路径、热重载路径）

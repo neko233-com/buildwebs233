@@ -58,6 +58,7 @@ type ComplianceProfile struct {
 	ReviewNotes     string               `json:"review_notes,omitempty"`
 	Checklist       []ComplianceItem     `json:"checklist,omitempty"`
 	Materials       []ComplianceMaterial `json:"materials,omitempty"`
+	ReviewHistory   []ComplianceEvent    `json:"review_history,omitempty"`
 	LastReviewedAt  *time.Time           `json:"last_reviewed_at,omitempty"`
 	LastSubmittedAt *time.Time           `json:"last_submitted_at,omitempty"`
 }
@@ -72,6 +73,16 @@ type ComplianceMaterial struct {
 	Note       string     `json:"note,omitempty"`
 	UploadedAt time.Time  `json:"uploaded_at"`
 	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
+}
+
+type ComplianceEvent struct {
+	ID         string    `json:"id"`
+	Action     string    `json:"action"`
+	Actor      string    `json:"actor"`
+	TargetType string    `json:"target_type"`
+	TargetID   string    `json:"target_id,omitempty"`
+	Note       string    `json:"note,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Page struct {
@@ -422,6 +433,14 @@ func (s *DiskStore) SetSitePrimaryPage(siteID, pageID string) (*Site, error) {
 	}
 	site.PrimaryPageID = pageID
 	site.UpdatedAt = time.Now()
+	site.Compliance.ReviewHistory = append([]ComplianceEvent{{
+		ID:         randomID(),
+		Action:     "set_homepage",
+		Actor:      "system",
+		TargetType: "page",
+		TargetID:   pageID,
+		CreatedAt:  time.Now(),
+	}}, site.Compliance.ReviewHistory...)
 	if err := s.saveSites(); err != nil {
 		return nil, err
 	}
@@ -476,6 +495,15 @@ func (s *DiskStore) ApplyTemplateToSite(siteID, templateID string) (*Page, *Site
 	if err := s.appendRevision(page, "apply_template"); err != nil {
 		return nil, nil, err
 	}
+	site.Compliance.ReviewHistory = append([]ComplianceEvent{{
+		ID:         randomID(),
+		Action:     "apply_template",
+		Actor:      "system",
+		TargetType: "template",
+		TargetID:   templateID,
+		CreatedAt:  time.Now(),
+	}}, site.Compliance.ReviewHistory...)
+	_ = s.saveSites()
 	pageCopy := page
 	siteCopy := *site
 	return &pageCopy, &siteCopy, nil
@@ -511,6 +539,15 @@ func (s *DiskStore) SaveComplianceMaterial(siteID, materialType, fileName string
 	site.Compliance.ReviewStatus = "materials_uploaded"
 	now := time.Now()
 	site.Compliance.LastSubmittedAt = &now
+	site.Compliance.ReviewHistory = append([]ComplianceEvent{{
+		ID:         randomID(),
+		Action:     "upload_material",
+		Actor:      "user",
+		TargetType: "material",
+		TargetID:   material.ID,
+		Note:       material.Type + ":" + material.FileName,
+		CreatedAt:  now,
+	}}, site.Compliance.ReviewHistory...)
 	site.UpdatedAt = time.Now()
 	if err := s.saveSites(); err != nil {
 		return nil, nil, err
@@ -551,6 +588,15 @@ func (s *DiskStore) ReviewCompliance(siteID, action, note, materialID string) (*
 	default:
 		site.Compliance.ReviewStatus = action
 	}
+	site.Compliance.ReviewHistory = append([]ComplianceEvent{{
+		ID:         randomID(),
+		Action:     action,
+		Actor:      "reviewer",
+		TargetType: "site",
+		TargetID:   siteID,
+		Note:       note,
+		CreatedAt:  now,
+	}}, site.Compliance.ReviewHistory...)
 	site.Compliance.LastReviewedAt = &now
 	site.UpdatedAt = time.Now()
 	if err := s.saveSites(); err != nil {
@@ -963,6 +1009,9 @@ func normalizeCompliance(region string, compliance ComplianceProfile) Compliance
 			{Code: "domain-proof", Label: "域名持有证明", Status: "missing"},
 			{Code: "hosting-proof", Label: "接入/服务器证明", Status: "missing"},
 		}
+	}
+	if compliance.ReviewHistory == nil {
+		compliance.ReviewHistory = []ComplianceEvent{}
 	}
 	return compliance
 }

@@ -75,9 +75,38 @@ body {
   margin-top: 10px;
 }
 
+.draft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.draft-item {
+  padding: 10px;
+  border: 1px dashed rgba(125, 211, 252, 0.3);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
 .materials a {
   color: #7dd3fc;
   text-decoration: none;
+}
+
+.site-item input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+}
+
+.history span {
+  color: #cbd5e1;
+  font-size: 12px;
 }
 
 .list li button {
