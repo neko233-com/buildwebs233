@@ -51,6 +51,9 @@ body {
 }
 
 .panel-head select,
+.template-bar select,
+.site-item select,
+.site-item button,
 .canvas button,
 .sites button {
   padding: 10px 12px;
@@ -94,6 +97,17 @@ body {
   text-decoration: none;
 }
 
+.material-card {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
 .site-item input {
   width: 100%;
   margin-top: 8px;
@@ -104,7 +118,13 @@ body {
   color: #e2e8f0;
 }
 
+.site-item select {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .history span {
+  display: block;
   color: #cbd5e1;
   font-size: 12px;
 }

@@ -80,11 +80,73 @@ type Roadmap = {
   recommended: RoadmapFeature[];
 };
 
+type TemplateOption = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+};
+
 const builtinBlocks: Block[] = [
   { id: "b1", type: "text", label: "主标题", props: { text: "主标题" } },
   { id: "b2", type: "text", label: "正文说明", props: { text: "正文说明" } },
   { id: "b3", type: "button", label: "按钮", props: { label: "立即咨询" } },
   { id: "b4", type: "hero", label: "Hero 区", props: { headline: "这是 Hero 区" } },
+];
+
+const templateCatalog: TemplateOption[] = [
+  { id: "tpl-hero", name: "企业官网模板", description: "通用企业官网首页，适合公司介绍与备案展示。", category: "通用企业" },
+  { id: "tpl-product", name: "产品展示模板", description: "适合 SaaS、工具与服务展示。", category: "通用企业" },
+  { id: "tpl-enterprise-corporate", name: "企业形象模板", description: "适合品牌官网、资质展示和企业介绍。", category: "通用企业" },
+  { id: "tpl-enterprise-factory", name: "制造工厂模板", description: "适合制造、设备与工厂类公司。", category: "通用企业" },
+  { id: "tpl-enterprise-service", name: "专业服务模板", description: "适合法务、咨询、顾问类服务站。", category: "通用企业" },
+  { id: "tpl-game-arcade", name: "游戏发行模板", description: "适合游戏官网、版本活动与下载入口。", category: "游戏" },
+  { id: "tpl-game-esports", name: "电竞赛事模板", description: "适合电竞战队、赛事专题与直播聚合。", category: "游戏" },
+  { id: "tpl-game-indie", name: "独立游戏模板", description: "适合独游工作室与玩家社区引流。", category: "游戏" },
+  { id: "tpl-ecommerce-fashion", name: "电商服饰模板", description: "适合服饰、美妆与潮流电商。", category: "电商" },
+  { id: "tpl-ecommerce-digital", name: "电商数码模板", description: "适合数码、家电与硬件销售。", category: "电商" },
+  { id: "tpl-ecommerce-local", name: "本地商城模板", description: "适合同城零售、团购与配送。", category: "电商" },
+  { id: "tpl-blog-personal", name: "个人博客模板", description: "适合个人博客与品牌专栏。", category: "博客" },
+  { id: "tpl-blog-tech", name: "技术博客模板", description: "适合教程、日志与技术文章。", category: "博客" },
+  { id: "tpl-blog-media", name: "媒体专栏模板", description: "适合媒体评论与订阅内容站。", category: "博客" },
+  { id: "tpl-technology-saas", name: "SaaS 科技模板", description: "适合 SaaS 平台与云服务官网。", category: "科技" },
+  { id: "tpl-technology-ai", name: "AI 科技模板", description: "适合 AI 产品与自动化服务。", category: "科技" },
+  { id: "tpl-technology-devtool", name: "开发工具模板", description: "适合开发者平台与基础设施产品。", category: "科技" },
+  { id: "tpl-science-lab", name: "实验室模板", description: "适合实验室、研究机构与课题组。", category: "科研" },
+  { id: "tpl-science-research", name: "科研项目模板", description: "适合项目成果与学术合作展示。", category: "科研" },
+  { id: "tpl-science-education", name: "科普教育模板", description: "适合科普平台与教育机构。", category: "科研" },
+  { id: "tpl-outsourcing-agency", name: "外包机构模板", description: "适合综合外包与商务服务公司。", category: "外包" },
+  { id: "tpl-outsourcing-software", name: "软件外包模板", description: "适合软件定制与研发交付团队。", category: "外包" },
+  { id: "tpl-outsourcing-design", name: "设计外包模板", description: "适合设计工作室与视觉服务。", category: "外包" },
+  { id: "tpl-music-artist", name: "音乐人模板", description: "适合歌手、乐队与作品推广。", category: "音乐" },
+  { id: "tpl-music-label", name: "厂牌模板", description: "适合音乐厂牌与版权合作。", category: "音乐" },
+  { id: "tpl-music-festival", name: "音乐节模板", description: "适合演出档期与票务说明。", category: "音乐" },
+  { id: "tpl-culture-museum", name: "文博馆模板", description: "适合博物馆、美术馆与文博机构。", category: "文化" },
+  { id: "tpl-culture-brand", name: "文化品牌模板", description: "适合文创品牌与文化故事站。", category: "文化" },
+  { id: "tpl-culture-event", name: "文化活动模板", description: "适合论坛、展演与公共文化项目。", category: "文化" },
+  { id: "tpl-news-local", name: "地方资讯模板", description: "适合地方资讯与民生信息站。", category: "新闻" },
+  { id: "tpl-news-tech", name: "科技资讯模板", description: "适合科技媒体与行业快讯。", category: "新闻" },
+  { id: "tpl-news-finance", name: "财经资讯模板", description: "适合财经媒体与研究简报。", category: "新闻" },
+  { id: "tpl-medical-clinic", name: "门诊医疗模板", description: "适合诊所、门诊与专科机构。", category: "医疗" },
+  { id: "tpl-medical-hospital", name: "医院机构模板", description: "适合综合医院与医疗集团。", category: "医疗" },
+  { id: "tpl-medical-telehealth", name: "互联网医疗模板", description: "适合在线问诊与健康平台。", category: "医疗" },
+  { id: "tpl-education-school", name: "学校机构模板", description: "适合学校、培训机构与校区介绍。", category: "教育" },
+  { id: "tpl-education-course", name: "课程招生模板", description: "适合课程介绍与在线报名。", category: "教育" },
+  { id: "tpl-education-vocational", name: "职业教育模板", description: "适合职业培训与认证机构。", category: "教育" },
+  { id: "tpl-finance-bank", name: "金融服务模板", description: "适合银行、理财与保险业务。", category: "金融" },
+  { id: "tpl-finance-advisory", name: "投顾咨询模板", description: "适合企业金融与顾问服务。", category: "金融" },
+  { id: "tpl-finance-fintech", name: "金融科技模板", description: "适合支付、风控与账务产品。", category: "金融" },
+];
+
+const complianceMaterialTypes = [
+  { value: "business-license", label: "营业执照" },
+  { value: "legal-identity", label: "法人身份证明" },
+  { value: "domain-proof", label: "域名持有证明" },
+  { value: "hosting-proof", label: "接入/服务器证明" },
+  { value: "medical-license", label: "医疗资质" },
+  { value: "publication-license", label: "出版/内容资质" },
+  { value: "finance-license", label: "金融牌照" },
+  { value: "general", label: "其他补充材料" },
 ];
 
 export default function App() {
@@ -95,6 +157,8 @@ export default function App() {
   const [activeSiteId, setActiveSiteId] = useState("site-default");
   const [selectedTemplateId, setSelectedTemplateId] = useState("tpl-hero");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [materialType, setMaterialType] = useState("business-license");
+  const [reviewNote, setReviewNote] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [templateConfig, setTemplateConfig] = useState({
     siteName: "",
@@ -236,6 +300,14 @@ export default function App() {
 
   const activeSite = sites.find((site) => site.id === activeSiteId) ?? null;
   const activeSitePages = pages.filter((page) => page.site_id === activeSiteId);
+  const selectedTemplate = templateCatalog.find((template) => template.id === selectedTemplateId) ?? templateCatalog[0];
+  const templateGroups = useMemo(() => {
+    return templateCatalog.reduce<Record<string, TemplateOption[]>>((acc, template) => {
+      acc[template.category] = acc[template.category] ?? [];
+      acc[template.category].push(template);
+      return acc;
+    }, {});
+  }, []);
 
   useEffect(() => {
     const primaryPage = activeSitePages.find((page) => page.id === activeSite?.primary_page_id) ?? activeSitePages[0];
@@ -249,6 +321,12 @@ export default function App() {
       ctaLabel: buttonBlock?.props?.label ?? "",
     });
   }, [activeSiteId, activeSite?.name, activeSite?.primary_page_id, activeSitePages]);
+
+  useEffect(() => {
+    if (activeSite?.template_id) {
+      setSelectedTemplateId(activeSite.template_id);
+    }
+  }, [activeSite?.template_id]);
 
   const applyTemplate = async () => {
     const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/apply-template`, {
@@ -298,7 +376,7 @@ export default function App() {
     }
     await ensureAuth();
     const form = new FormData();
-    form.append("type", "business-license");
+    form.append("type", materialType);
     form.append("file", uploadFile);
     const res = await fetch(`/api/admin/sites/${activeSiteId}/compliance/materials`, {
       method: "POST",
@@ -309,6 +387,20 @@ export default function App() {
       return;
     }
     setUploadFile(null);
+    setReviewNote("");
+    await loadSites().then(setSites);
+  };
+
+  const reviewMaterial = async (materialId: string) => {
+    const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/compliance/review`, {
+      action: "mark_material_verified",
+      note: reviewNote,
+      material_id: materialId,
+    });
+    if (!res.ok) {
+      return;
+    }
+    setReviewNote("");
     await loadSites().then(setSites);
   };
 
@@ -443,11 +535,21 @@ export default function App() {
         </div>
         <div className="template-bar">
           <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-            <option value="tpl-hero">企业官网模板</option>
-            <option value="tpl-product">产品展示模板</option>
+            {Object.entries(templateGroups).map(([group, templates]) => (
+              <optgroup key={group} label={group}>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
           <button onClick={applyTemplate}>一键套模板</button>
         </div>
+        <p className="muted">
+          已选模板：{selectedTemplate.name} / {selectedTemplate.description}
+        </p>
         <ul>
           {sites.map((site) => (
             <li key={site.id} className="site-item">
@@ -489,14 +591,32 @@ export default function App() {
           <div className="action-row">
             <button onClick={() => submitCompliance("submit")}>提交审核</button>
             <button onClick={() => submitCompliance("approve")}>模拟通过</button>
+            <button onClick={() => submitCompliance("reject")}>模拟驳回</button>
           </div>
+          <select value={materialType} onChange={(event) => setMaterialType(event.target.value)}>
+            {complianceMaterialTypes.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
           <input type="file" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
           <button onClick={uploadComplianceMaterial}>上传材料</button>
+          <input
+            value={reviewNote}
+            onChange={(event) => setReviewNote(event.target.value)}
+            placeholder="审核意见 / 备注"
+          />
           <div className="materials">
             {(activeSite?.compliance?.materials ?? []).map((material) => (
-              <a key={material.id} href={material.public_url} target="_blank" rel="noreferrer">
-                {material.file_name} / {material.status}
-              </a>
+              <div key={material.id} className="material-card">
+                <a href={material.public_url} target="_blank" rel="noreferrer">
+                  {material.file_name}
+                </a>
+                <span>{material.type}</span>
+                <span>{material.status}</span>
+                <button onClick={() => reviewMaterial(material.id)}>标记已核验</button>
+              </div>
             ))}
           </div>
           <div className="materials history">

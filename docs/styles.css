@@ -107,6 +107,11 @@ h1 {
   margin-top: 0;
 }
 
+.card a,
+.doc-card a {
+  color: var(--brand-dark);
+}
+
 ul {
   margin: 0;
   padding-left: 18px;

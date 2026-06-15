@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>buildwebs233 备案中心手册</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="doc-shell">
+      <a class="back-link" href="./index.html">返回首页</a>
+      <h1>备案中心与审核流</h1>
+
+      <section class="doc-card">
+        <h2>当前支持能力</h2>
+        <ul>
+          <li>材料上传：`POST /api/admin/sites/{id}/compliance/materials`</li>
+          <li>审核流转：`POST /api/admin/sites/{id}/compliance/review`</li>
+          <li>状态字段：ICP、公安备案、审核状态、最近提交、最近审核</li>
+          <li>审核历史：自动记录模板套用、首页切换、材料上传、审核动作</li>
+        </ul>
+      </section>
+
+      <section class="doc-card">
+        <h2>材料分类建议</h2>
+        <ul>
+          <li>营业执照</li>
+          <li>法人身份证明</li>
+          <li>域名持有证明</li>
+          <li>接入/服务器证明</li>
+          <li>医疗资质、出版资质、金融牌照等行业补充材料</li>
+        </ul>
+      </section>
+
+      <section class="doc-card">
+        <h2>推荐审核流</h2>
+        <ul>
+          <li>`draft`：资料整理阶段</li>
+          <li>`materials_uploaded`：材料已上传，等待审阅</li>
+          <li>`submitted`：已提审</li>
+          <li>`approved`：审核通过</li>
+          <li>`rejected`：退回修改，附审核意见</li>
+        </ul>
+      </section>
+
+      <section class="doc-card">
+        <h2>适合你的使用方式</h2>
+        <p>先从行业模板一键起站，再上传备案材料，把审核意见写进站点历史。这样既能快速拿给客户确认，也能让后续审核、复核、补件都有轨迹可追。</p>
+      </section>
+    </main>
+  </body>
+</html>
