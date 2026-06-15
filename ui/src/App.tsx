@@ -44,7 +44,24 @@ type Site = {
     icp_status?: string;
     psb_status?: string;
     review_status?: string;
+    materials?: ComplianceMaterial[];
   };
+};
+
+type ComplianceMaterial = {
+  id: string;
+  type: string;
+  file_name: string;
+  public_url: string;
+  status: string;
+};
+
+type PageRevision = {
+  id: string;
+  version: number;
+  status: string;
+  source: string;
+  created_at: string;
 };
 
 type RoadmapFeature = {
@@ -75,6 +92,9 @@ export default function App() {
   const [sites, setSites] = useState<Site[]>([]);
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [activeSiteId, setActiveSiteId] = useState("site-default");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("tpl-hero");
+  const [revisions, setRevisions] = useState<PageRevision[]>([]);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const previewHTML = useMemo(() => {
     if (draft.length === 0) {
@@ -102,6 +122,15 @@ export default function App() {
   useEffect(() => {
     loadPages(activeSiteId).then(setPages).catch(() => setPages([]));
   }, [activeSiteId]);
+
+  useEffect(() => {
+    const primaryPageId = sites.find((site) => site.id === activeSiteId)?.primary_page_id;
+    if (!primaryPageId) {
+      setRevisions([]);
+      return;
+    }
+    loadPageRevisions(primaryPageId).then(setRevisions).catch(() => setRevisions([]));
+  }, [activeSiteId, sites]);
 
   const onDrop = (block: Block) => {
     setDraft((prev) => [...prev, { ...block, id: `${block.id}-${Date.now()}` }]);
@@ -196,6 +225,72 @@ export default function App() {
   };
 
   const activeSite = sites.find((site) => site.id === activeSiteId) ?? null;
+  const activeSitePages = pages.filter((page) => page.site_id === activeSiteId);
+
+  const applyTemplate = async () => {
+    const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/apply-template`, {
+      template_id: selectedTemplateId,
+    });
+    if (!res.ok) {
+      return;
+    }
+    await Promise.all([loadSites().then(setSites), loadPages(activeSiteId).then(setPages)]);
+  };
+
+  const publishPrimaryPage = async () => {
+    if (!activeSite?.primary_page_id) {
+      return;
+    }
+    const res = await authedPost(`/api/admin/pages/${activeSite.primary_page_id}/publish`);
+    if (!res.ok) {
+      return;
+    }
+    await Promise.all([
+      loadPages(activeSiteId).then(setPages),
+      loadPageRevisions(activeSite.primary_page_id).then(setRevisions),
+    ]);
+  };
+
+  const setHomepage = async (pageId: string) => {
+    const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/homepage`, {
+      page_id: pageId,
+    });
+    if (!res.ok) {
+      return;
+    }
+    await loadSites().then(setSites);
+  };
+
+  const submitCompliance = async (action: string) => {
+    const res = await authedJsonFetch(`/api/admin/sites/${activeSiteId}/compliance/review`, {
+      action,
+      note: "",
+    });
+    if (!res.ok) {
+      return;
+    }
+    await loadSites().then(setSites);
+  };
+
+  const uploadComplianceMaterial = async () => {
+    if (!uploadFile) {
+      return;
+    }
+    await ensureAuth();
+    const form = new FormData();
+    form.append("type", "business-license");
+    form.append("file", uploadFile);
+    const res = await fetch(`/api/admin/sites/${activeSiteId}/compliance/materials`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!res.ok) {
+      return;
+    }
+    setUploadFile(null);
+    await loadSites().then(setSites);
+  };
 
   return (
     <main className="shell">
@@ -226,13 +321,23 @@ export default function App() {
           </select>
         </div>
         <div className="frame" dangerouslySetInnerHTML={{ __html: previewHTML }} />
-        <button onClick={saveDraft}>保存页面</button>
+        <div className="action-row">
+          <button onClick={saveDraft}>保存页面</button>
+          <button onClick={publishPrimaryPage}>发布首页</button>
+        </div>
         <p className="muted">当前页面将保存到站点：{activeSite?.name ?? "默认企业站"}</p>
       </section>
       <section className="sites">
         <div className="panel-head">
           <h2>站点中心</h2>
           <button onClick={createSiteSkeleton}>创建站点骨架</button>
+        </div>
+        <div className="template-bar">
+          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+            <option value="tpl-hero">企业官网模板</option>
+            <option value="tpl-product">产品展示模板</option>
+          </select>
+          <button onClick={applyTemplate}>一键套模板</button>
         </div>
         <ul>
           {sites.map((site) => (
@@ -242,9 +347,26 @@ export default function App() {
               <span>{site.status}</span>
               <span>ICP备案: {site.compliance?.icp_status ?? "not_started"}</span>
               <span>公安备案: {site.compliance?.psb_status ?? "not_started"}</span>
+              <span>审核: {site.compliance?.review_status ?? "draft"}</span>
             </li>
           ))}
         </ul>
+        <div className="site-item">
+          <strong>备案中心</strong>
+          <div className="action-row">
+            <button onClick={() => submitCompliance("submit")}>提交审核</button>
+            <button onClick={() => submitCompliance("approve")}>模拟通过</button>
+          </div>
+          <input type="file" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
+          <button onClick={uploadComplianceMaterial}>上传材料</button>
+          <div className="materials">
+            {(activeSite?.compliance?.materials ?? []).map((material) => (
+              <a key={material.id} href={material.public_url} target="_blank" rel="noreferrer">
+                {material.file_name} / {material.status}
+              </a>
+            ))}
+          </div>
+        </div>
       </section>
       <section className="list">
         <h2>页面与路线</h2>
@@ -254,9 +376,22 @@ export default function App() {
               {item.name}
               <span>{` /${item.slug}`}</span>
               <span>{item.status}</span>
+              <button onClick={() => setHomepage(item.id)}>设为首页</button>
             </li>
           ))}
         </ul>
+        <div className="roadmap revisions">
+          <h3>页面版本</h3>
+          {revisions.map((revision) => (
+            <article key={revision.id} className="feature-card">
+              <header>
+                <strong>v{revision.version}</strong>
+                <span>{revision.status}</span>
+              </header>
+              <p>{revision.source}</p>
+            </article>
+          ))}
+        </div>
         <div className="roadmap">
           <h3>{roadmap?.product} 路线</h3>
           <p>{roadmap?.vision}</p>
@@ -298,4 +433,39 @@ async function loadRoadmap(): Promise<Roadmap | null> {
     return null;
   }
   return (await res.json()) as Roadmap;
+}
+
+async function loadPageRevisions(pageId: string): Promise<PageRevision[]> {
+  const res = await fetch(`/api/pages/${pageId}/revisions`);
+  if (!res.ok) {
+    return [];
+  }
+  return (await res.json()) as PageRevision[];
+}
+
+async function ensureAuth(): Promise<void> {
+  await fetch("/api/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "root", password: "root" }),
+  });
+}
+
+async function authedPost(url: string): Promise<Response> {
+  await ensureAuth();
+  return await fetch(url, {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
+async function authedJsonFetch(url: string, body: unknown): Promise<Response> {
+  await ensureAuth();
+  return await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

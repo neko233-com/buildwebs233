@@ -74,6 +74,19 @@
 - `Page Sections/Blocks DSL`，为拖拽编辑与模板系统提供结构化内容模型
 - `Site Compliance` 备案中心骨架，包含 ICP/公安备案状态与材料 checklist 默认项
 
+最新这一轮已经把 3 组能力推进到“可用功能”：
+- 模板一键套用与首页设置
+  - `POST /api/admin/sites/{id}/apply-template`
+  - `POST /api/admin/sites/{id}/homepage`
+- 页面版本快照与发布状态
+  - 保存页面自动生成 revision
+  - `GET /api/pages/{id}/revisions`
+  - `POST /api/admin/pages/{id}/publish`
+- 备案中心材料上传与审核流 API
+  - `POST /api/admin/sites/{id}/compliance/materials`
+  - `POST /api/admin/sites/{id}/compliance/review`
+  - 上传文件落本地 `data/uploads/`
+
 ## 文件说明
 - `server.yaml`：启动配置（账号密码、端口、监听路径、热重载路径）
 - `internal/config/manager.go`：配置热重载监听入口

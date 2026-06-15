@@ -60,6 +60,30 @@ body {
   color: #e2e8f0;
 }
 
+.action-row,
+.template-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.materials a {
+  color: #7dd3fc;
+  text-decoration: none;
+}
+
+.list li button {
+  margin-left: 8px;
+}
+
 .site-item,
 .feature-card {
   padding: 10px;

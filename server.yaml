@@ -13,8 +13,10 @@ auth:
 storage:
   data_dir: "data"
   pages_file: "pages.json"
+  revisions_file: "revisions.json"
   sites_file: "sites.json"
   templates_file: "templates.json"
+  uploads_dir: "uploads"
 
 hot_reload:
   enabled: true

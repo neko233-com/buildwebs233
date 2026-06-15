@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -39,6 +40,20 @@ type loginReq struct {
 	Password string `json:"password"`
 }
 
+type applyTemplateReq struct {
+	TemplateID string `json:"template_id"`
+}
+
+type setHomepageReq struct {
+	PageID string `json:"page_id"`
+}
+
+type reviewComplianceReq struct {
+	Action     string `json:"action"`
+	Note       string `json:"note"`
+	MaterialID string `json:"material_id,omitempty"`
+}
+
 func NewApp(cfg *config.Manager, s *store.DiskStore, reload *hotreload.Hub, logger *log.Logger) *App {
 	return &App{
 		cfgManager: cfg,
@@ -54,12 +69,14 @@ func (a *App) RegisterRoutes(r chi.Router) {
 	r.Get("/api/reload", a.handleReloadSSE)
 	r.Get("/api/pages", a.handleListPages)
 	r.Get("/api/pages/{id}", a.handleGetPage)
+	r.Get("/api/pages/{id}/revisions", a.handleListPageRevisions)
 	r.Get("/api/sites", a.handleListSites)
 	r.Get("/api/sites/{id}", a.handleGetSite)
 	r.Get("/api/sites/{id}/pages", a.handleListSitePages)
 	r.Get("/api/templates", a.handleListTemplates)
 	r.Get("/api/platform/roadmap", a.handleRoadmap)
 	r.Get("/__reload-client.js", a.handleReloadClient)
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(a.currentConfig().UploadsPath()))))
 
 	r.Post("/api/login", a.handleLogin)
 	r.Post("/api/logout", a.handleLogout)
@@ -68,7 +85,12 @@ func (a *App) RegisterRoutes(r chi.Router) {
 		r.Use(a.authMiddleware)
 		r.Post("/pages", a.handleSavePage)
 		r.Delete("/pages/{id}", a.handleDeletePage)
+		r.Post("/pages/{id}/publish", a.handlePublishPage)
 		r.Post("/sites", a.handleSaveSite)
+		r.Post("/sites/{id}/apply-template", a.handleApplyTemplate)
+		r.Post("/sites/{id}/homepage", a.handleSetHomepage)
+		r.Post("/sites/{id}/compliance/materials", a.handleUploadComplianceMaterial)
+		r.Post("/sites/{id}/compliance/review", a.handleReviewCompliance)
 	})
 
 	r.Get("/admin", a.handleAdminStatic)
@@ -159,6 +181,15 @@ func (a *App) handleGetPage(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, p)
 }
 
+func (a *App) handleListPageRevisions(w http.ResponseWriter, r *http.Request) {
+	pageID := chi.URLParam(r, "id")
+	if _, ok := a.store.GetPageByID(pageID); !ok {
+		a.writeError(w, http.StatusNotFound, "page not found")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, a.store.ListPageRevisions(pageID))
+}
+
 func (a *App) handleListSites(w http.ResponseWriter, r *http.Request) {
 	sites := a.store.ListSites()
 	a.writeJSON(w, http.StatusOK, sites)
@@ -214,6 +245,115 @@ func (a *App) handleSaveSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.writeJSON(w, http.StatusOK, saved)
+}
+
+func (a *App) handlePublishPage(w http.ResponseWriter, r *http.Request) {
+	pageID := chi.URLParam(r, "id")
+	saved, err := a.store.PublishPage(pageID)
+	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusNotFound, "page not found")
+			return
+		}
+		a.writeError(w, http.StatusInternalServerError, "publish page failed")
+		return
+	}
+	a.reloadHub.Broadcast(hotreload.Event{Type: "html", File: "/p/" + saved.Slug})
+	a.writeJSON(w, http.StatusOK, saved)
+}
+
+func (a *App) handleApplyTemplate(w http.ResponseWriter, r *http.Request) {
+	siteID := chi.URLParam(r, "id")
+	var in applyTemplateReq
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid template payload")
+		return
+	}
+	page, site, err := a.store.ApplyTemplateToSite(siteID, in.TemplateID)
+	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusNotFound, "site or template not found")
+			return
+		}
+		a.writeError(w, http.StatusInternalServerError, "apply template failed")
+		return
+	}
+	a.reloadHub.Broadcast(hotreload.Event{Type: "html", File: "/p/" + page.Slug})
+	a.writeJSON(w, http.StatusOK, map[string]any{
+		"site": site,
+		"page": page,
+	})
+}
+
+func (a *App) handleSetHomepage(w http.ResponseWriter, r *http.Request) {
+	siteID := chi.URLParam(r, "id")
+	var in setHomepageReq
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid homepage payload")
+		return
+	}
+	site, err := a.store.SetSitePrimaryPage(siteID, in.PageID)
+	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusNotFound, "site or page not found")
+			return
+		}
+		a.writeError(w, http.StatusInternalServerError, "set homepage failed")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, site)
+}
+
+func (a *App) handleUploadComplianceMaterial(w http.ResponseWriter, r *http.Request) {
+	siteID := chi.URLParam(r, "id")
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	body, err := io.ReadAll(file)
+	if err != nil {
+		a.writeError(w, http.StatusInternalServerError, "read upload failed")
+		return
+	}
+	materialType := r.FormValue("type")
+	material, site, err := a.store.SaveComplianceMaterial(siteID, materialType, header.Filename, body)
+	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusNotFound, "site not found")
+			return
+		}
+		a.writeError(w, http.StatusInternalServerError, "save material failed")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, map[string]any{
+		"material": material,
+		"site":     site,
+	})
+}
+
+func (a *App) handleReviewCompliance(w http.ResponseWriter, r *http.Request) {
+	siteID := chi.URLParam(r, "id")
+	var in reviewComplianceReq
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid review payload")
+		return
+	}
+	site, err := a.store.ReviewCompliance(siteID, in.Action, in.Note, in.MaterialID)
+	if err != nil {
+		if err == os.ErrNotExist {
+			a.writeError(w, http.StatusNotFound, "site not found")
+			return
+		}
+		a.writeError(w, http.StatusInternalServerError, "review compliance failed")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, site)
 }
 
 func (a *App) handleDeletePage(w http.ResponseWriter, r *http.Request) {

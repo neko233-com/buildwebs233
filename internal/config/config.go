@@ -31,8 +31,10 @@ type AuthConfig struct {
 type StorageConfig struct {
 	DataDir       string `yaml:"data_dir"`
 	PagesFile     string `yaml:"pages_file"`
+	RevisionsFile string `yaml:"revisions_file"`
 	SitesFile     string `yaml:"sites_file"`
 	TemplatesFile string `yaml:"templates_file"`
+	UploadsDir    string `yaml:"uploads_dir"`
 }
 
 type HotReloadConfig struct {
@@ -71,8 +73,10 @@ func defaultConfig() Config {
 		Storage: StorageConfig{
 			DataDir:       "data",
 			PagesFile:     "pages.json",
+			RevisionsFile: "revisions.json",
 			SitesFile:     "sites.json",
 			TemplatesFile: "templates.json",
+			UploadsDir:    "uploads",
 		},
 		HotReload: HotReloadConfig{
 			Enabled: true,
@@ -112,33 +116,47 @@ func (c *Config) fillDefaults() {
 	if c.Storage.PagesFile == "" {
 		c.Storage.PagesFile = d.Storage.PagesFile
 	}
+	if c.Storage.RevisionsFile == "" {
+		c.Storage.RevisionsFile = d.Storage.RevisionsFile
+	}
 	if c.Storage.SitesFile == "" {
 		c.Storage.SitesFile = d.Storage.SitesFile
 	}
 	if c.Storage.TemplatesFile == "" {
 		c.Storage.TemplatesFile = d.Storage.TemplatesFile
 	}
+	if c.Storage.UploadsDir == "" {
+		c.Storage.UploadsDir = d.Storage.UploadsDir
+	}
 	if len(c.HotReload.WatchPath) == 0 {
 		c.HotReload.WatchPath = d.HotReload.WatchPath
 	}
 }
 
-func (c *Config) ReadTimeout() time.Duration {
+func (c Config) ReadTimeout() time.Duration {
 	return time.Duration(c.Server.ReadTimeoutSeconds) * time.Second
 }
 
-func (c *Config) WriteTimeout() time.Duration {
+func (c Config) WriteTimeout() time.Duration {
 	return time.Duration(c.Server.WriteTimeoutSeconds) * time.Second
 }
 
-func (c *Config) PagesPath() string {
+func (c Config) PagesPath() string {
 	return c.Storage.DataDir + "/" + c.Storage.PagesFile
 }
 
-func (c *Config) TemplatesPath() string {
+func (c Config) TemplatesPath() string {
 	return c.Storage.DataDir + "/" + c.Storage.TemplatesFile
 }
 
-func (c *Config) SitesPath() string {
+func (c Config) SitesPath() string {
 	return c.Storage.DataDir + "/" + c.Storage.SitesFile
+}
+
+func (c Config) RevisionsPath() string {
+	return c.Storage.DataDir + "/" + c.Storage.RevisionsFile
+}
+
+func (c Config) UploadsPath() string {
+	return c.Storage.DataDir + "/" + c.Storage.UploadsDir
 }

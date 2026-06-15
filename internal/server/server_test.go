@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -126,13 +128,89 @@ func TestRoadmapAndSitesEndpoints(t *testing.T) {
 	}
 }
 
+func TestTemplatePublishAndComplianceEndpoints(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	router := chi.NewRouter()
+	app.RegisterRoutes(router)
+
+	authCookie := loginAsAdmin(t, router)
+
+	applyReq := httptest.NewRequest(http.MethodPost, "/api/admin/sites/site-default/apply-template", strings.NewReader(`{"template_id":"tpl-product"}`))
+	applyReq.Header.Set("Content-Type", "application/json")
+	applyReq.AddCookie(authCookie)
+	applyRec := httptest.NewRecorder()
+	router.ServeHTTP(applyRec, applyReq)
+	if applyRec.Code != http.StatusOK {
+		t.Fatalf("expected template apply 200, got %d", applyRec.Code)
+	}
+
+	sitesReq := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
+	sitesRec := httptest.NewRecorder()
+	router.ServeHTTP(sitesRec, sitesReq)
+	var sites []store.Site
+	if err := json.Unmarshal(sitesRec.Body.Bytes(), &sites); err != nil {
+		t.Fatalf("decode sites: %v", err)
+	}
+	primaryPageID := sites[0].PrimaryPageID
+	if primaryPageID == "" {
+		t.Fatal("expected primary page after template apply")
+	}
+
+	publishReq := httptest.NewRequest(http.MethodPost, "/api/admin/pages/"+primaryPageID+"/publish", nil)
+	publishReq.AddCookie(authCookie)
+	publishRec := httptest.NewRecorder()
+	router.ServeHTTP(publishRec, publishReq)
+	if publishRec.Code != http.StatusOK {
+		t.Fatalf("expected publish 200, got %d", publishRec.Code)
+	}
+
+	revisionsReq := httptest.NewRequest(http.MethodGet, "/api/pages/"+primaryPageID+"/revisions", nil)
+	revisionsRec := httptest.NewRecorder()
+	router.ServeHTTP(revisionsRec, revisionsReq)
+	if revisionsRec.Code != http.StatusOK || !strings.Contains(revisionsRec.Body.String(), `"version"`) {
+		t.Fatalf("expected revisions payload, got %d %q", revisionsRec.Code, revisionsRec.Body.String())
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("type", "business-license")
+	part, err := writer.CreateFormFile("file", "license.txt")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := io.WriteString(part, "license"); err != nil {
+		t.Fatalf("write upload: %v", err)
+	}
+	writer.Close()
+
+	uploadReq := httptest.NewRequest(http.MethodPost, "/api/admin/sites/site-default/compliance/materials", &body)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadReq.AddCookie(authCookie)
+	uploadRec := httptest.NewRecorder()
+	router.ServeHTTP(uploadRec, uploadReq)
+	if uploadRec.Code != http.StatusOK {
+		t.Fatalf("expected upload 200, got %d", uploadRec.Code)
+	}
+
+	reviewReq := httptest.NewRequest(http.MethodPost, "/api/admin/sites/site-default/compliance/review", strings.NewReader(`{"action":"submit","note":""}`))
+	reviewReq.Header.Set("Content-Type", "application/json")
+	reviewReq.AddCookie(authCookie)
+	reviewRec := httptest.NewRecorder()
+	router.ServeHTTP(reviewRec, reviewReq)
+	if reviewRec.Code != http.StatusOK || !strings.Contains(reviewRec.Body.String(), `"submitted"`) {
+		t.Fatalf("expected review submit success, got %d %q", reviewRec.Code, reviewRec.Body.String())
+	}
+}
+
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 
 	dir := t.TempDir()
 	dataDir := filepath.Join(dir, "data")
 	cfgPath := filepath.Join(dir, "server.yaml")
-	cfgBody := []byte("server:\n  static_dir: \"" + filepath.ToSlash(filepath.Join(dir, "web")) + "\"\nauth:\n  username: \"root\"\n  password: \"root\"\nstorage:\n  data_dir: \"" + filepath.ToSlash(dataDir) + "\"\n  pages_file: \"pages.json\"\n  sites_file: \"sites.json\"\n  templates_file: \"templates.json\"\n")
+	cfgBody := []byte("server:\n  static_dir: \"" + filepath.ToSlash(filepath.Join(dir, "web")) + "\"\nauth:\n  username: \"root\"\n  password: \"root\"\nstorage:\n  data_dir: \"" + filepath.ToSlash(dataDir) + "\"\n  pages_file: \"pages.json\"\n  revisions_file: \"revisions.json\"\n  sites_file: \"sites.json\"\n  templates_file: \"templates.json\"\n  uploads_dir: \"uploads\"\n")
 	if err := os.WriteFile(cfgPath, cfgBody, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -147,4 +225,20 @@ func newTestApp(t *testing.T) *App {
 	}
 
 	return NewApp(cfgManager, repo, hotreload.NewHub(), nil)
+}
+
+func loginAsAdmin(t *testing.T, router http.Handler) *http.Cookie {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"root","password":"root"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected login 200, got %d", rec.Code)
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected auth cookie")
+	}
+	return cookies[0]
 }

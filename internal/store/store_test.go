@@ -15,8 +15,10 @@ func TestUpsertPageGeneratesUniqueSlugAndPersists(t *testing.T) {
 	repo, err := NewDiskStore(config.StorageConfig{
 		DataDir:       dir,
 		PagesFile:     "pages.json",
+		RevisionsFile: "revisions.json",
 		SitesFile:     "sites.json",
 		TemplatesFile: "templates.json",
+		UploadsDir:    "uploads",
 	})
 	if err != nil {
 		t.Fatalf("new store: %v", err)
@@ -73,6 +75,10 @@ func TestUpsertPageGeneratesUniqueSlugAndPersists(t *testing.T) {
 	if got := repo.ListPagesBySite("site-default"); len(got) != 2 {
 		t.Fatalf("expected 2 pages for site-default, got %d", len(got))
 	}
+	revisions := repo.ListPageRevisions(first.ID)
+	if len(revisions) == 0 {
+		t.Fatal("expected at least one revision after save")
+	}
 }
 
 func TestUpsertSitePersistsSiteRecord(t *testing.T) {
@@ -82,8 +88,10 @@ func TestUpsertSitePersistsSiteRecord(t *testing.T) {
 	repo, err := NewDiskStore(config.StorageConfig{
 		DataDir:       dir,
 		PagesFile:     "pages.json",
+		RevisionsFile: "revisions.json",
 		SitesFile:     "sites.json",
 		TemplatesFile: "templates.json",
+		UploadsDir:    "uploads",
 	})
 	if err != nil {
 		t.Fatalf("new store: %v", err)
@@ -111,5 +119,62 @@ func TestUpsertSitePersistsSiteRecord(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "sites.json")); err != nil {
 		t.Fatalf("expected sites file: %v", err)
+	}
+}
+
+func TestTemplateHomepagePublishAndComplianceFlow(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	repo, err := NewDiskStore(config.StorageConfig{
+		DataDir:       dir,
+		PagesFile:     "pages.json",
+		RevisionsFile: "revisions.json",
+		SitesFile:     "sites.json",
+		TemplatesFile: "templates.json",
+		UploadsDir:    "uploads",
+	})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	page, site, err := repo.ApplyTemplateToSite("site-default", "tpl-product")
+	if err != nil {
+		t.Fatalf("apply template: %v", err)
+	}
+	if page.TemplateID != "tpl-product" || site.TemplateID != "tpl-product" {
+		t.Fatal("expected template applied to site and page")
+	}
+
+	published, err := repo.PublishPage(page.ID)
+	if err != nil {
+		t.Fatalf("publish page: %v", err)
+	}
+	if published.Status != "published" {
+		t.Fatalf("expected published status, got %q", published.Status)
+	}
+
+	updatedSite, err := repo.SetSitePrimaryPage("site-default", page.ID)
+	if err != nil {
+		t.Fatalf("set homepage: %v", err)
+	}
+	if updatedSite.PrimaryPageID != page.ID {
+		t.Fatalf("expected primary page id %q, got %q", page.ID, updatedSite.PrimaryPageID)
+	}
+
+	material, reviewedSite, err := repo.SaveComplianceMaterial("site-default", "business-license", "license.pdf", []byte("file"))
+	if err != nil {
+		t.Fatalf("save compliance material: %v", err)
+	}
+	if material.PublicURL == "" || len(reviewedSite.Compliance.Materials) == 0 {
+		t.Fatal("expected stored material metadata")
+	}
+
+	reviewedSite, err = repo.ReviewCompliance("site-default", "mark_material_verified", "ok", material.ID)
+	if err != nil {
+		t.Fatalf("review material: %v", err)
+	}
+	if reviewedSite.Compliance.Materials[0].Status != "verified" {
+		t.Fatalf("expected verified material, got %q", reviewedSite.Compliance.Materials[0].Status)
 	}
 }

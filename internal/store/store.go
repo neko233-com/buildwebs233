@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -47,17 +48,30 @@ type ComplianceItem struct {
 }
 
 type ComplianceProfile struct {
-	CompanyName     string           `json:"company_name,omitempty"`
-	ContactName     string           `json:"contact_name,omitempty"`
-	ContactPhone    string           `json:"contact_phone,omitempty"`
-	RegionRule      string           `json:"region_rule,omitempty"`
-	ICPStatus       string           `json:"icp_status,omitempty"`
-	PSBStatus       string           `json:"psb_status,omitempty"`
-	ReviewStatus    string           `json:"review_status,omitempty"`
-	ReviewNotes     string           `json:"review_notes,omitempty"`
-	Checklist       []ComplianceItem `json:"checklist,omitempty"`
-	LastReviewedAt  *time.Time       `json:"last_reviewed_at,omitempty"`
-	LastSubmittedAt *time.Time       `json:"last_submitted_at,omitempty"`
+	CompanyName     string               `json:"company_name,omitempty"`
+	ContactName     string               `json:"contact_name,omitempty"`
+	ContactPhone    string               `json:"contact_phone,omitempty"`
+	RegionRule      string               `json:"region_rule,omitempty"`
+	ICPStatus       string               `json:"icp_status,omitempty"`
+	PSBStatus       string               `json:"psb_status,omitempty"`
+	ReviewStatus    string               `json:"review_status,omitempty"`
+	ReviewNotes     string               `json:"review_notes,omitempty"`
+	Checklist       []ComplianceItem     `json:"checklist,omitempty"`
+	Materials       []ComplianceMaterial `json:"materials,omitempty"`
+	LastReviewedAt  *time.Time           `json:"last_reviewed_at,omitempty"`
+	LastSubmittedAt *time.Time           `json:"last_submitted_at,omitempty"`
+}
+
+type ComplianceMaterial struct {
+	ID         string     `json:"id"`
+	Type       string     `json:"type"`
+	FileName   string     `json:"file_name"`
+	FilePath   string     `json:"file_path"`
+	PublicURL  string     `json:"public_url"`
+	Status     string     `json:"status"`
+	Note       string     `json:"note,omitempty"`
+	UploadedAt time.Time  `json:"uploaded_at"`
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
 }
 
 type Page struct {
@@ -97,12 +111,26 @@ type Template struct {
 	Thumbnail   string `json:"thumbnail"`
 }
 
+type PageRevision struct {
+	ID        string    `json:"id"`
+	PageID    string    `json:"page_id"`
+	SiteID    string    `json:"site_id"`
+	Version   int       `json:"version"`
+	Status    string    `json:"status"`
+	Source    string    `json:"source"`
+	Snapshot  Page      `json:"snapshot"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type DiskStore struct {
 	mu            sync.RWMutex
 	pagesPath     string
+	revisionsPath string
 	sitesPath     string
 	templatesPath string
+	uploadsDir    string
 	pages         map[string]*Page
+	revisions     []PageRevision
 	sites         map[string]*Site
 	templates     map[string]*Template
 }
@@ -119,19 +147,32 @@ type sitesFile struct {
 	Items []Site `json:"items"`
 }
 
+type revisionsFile struct {
+	Items []PageRevision `json:"items"`
+}
+
 func NewDiskStore(cfg config.StorageConfig) (*DiskStore, error) {
 	s := &DiskStore{
 		pagesPath:     filepath.Join(cfg.DataDir, cfg.PagesFile),
+		revisionsPath: filepath.Join(cfg.DataDir, cfg.RevisionsFile),
 		sitesPath:     filepath.Join(cfg.DataDir, cfg.SitesFile),
 		templatesPath: filepath.Join(cfg.DataDir, cfg.TemplatesFile),
+		uploadsDir:    filepath.Join(cfg.DataDir, cfg.UploadsDir),
 		pages:         map[string]*Page{},
+		revisions:     []PageRevision{},
 		sites:         map[string]*Site{},
 		templates:     map[string]*Template{},
 	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(s.uploadsDir, 0o755); err != nil {
+		return nil, err
+	}
 	if err := s.loadPages(); err != nil {
+		return nil, err
+	}
+	if err := s.loadRevisions(); err != nil {
 		return nil, err
 	}
 	if err := s.loadSites(); err != nil {
@@ -168,6 +209,21 @@ func (s *DiskStore) ListPagesBySite(siteID string) []Page {
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].UpdatedAt.After(result[j].UpdatedAt)
+	})
+	return result
+}
+
+func (s *DiskStore) ListPageRevisions(pageID string) []PageRevision {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]PageRevision, 0)
+	for _, rev := range s.revisions {
+		if rev.PageID == pageID {
+			result = append(result, rev)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Version > result[j].Version
 	})
 	return result
 }
@@ -281,6 +337,9 @@ func (s *DiskStore) UpsertPage(p Page) (*Page, error) {
 	if err := s.savePages(); err != nil {
 		return nil, err
 	}
+	if err := s.appendRevision(p, "save"); err != nil {
+		return nil, err
+	}
 	return &p, nil
 }
 
@@ -329,6 +388,178 @@ func (s *DiskStore) DeletePage(id string) error {
 	return s.savePages()
 }
 
+func (s *DiskStore) PublishPage(pageID string) (*Page, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	page, ok := s.pages[pageID]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	page.Status = "published"
+	page.UpdatedAt = time.Now()
+	if err := s.savePages(); err != nil {
+		return nil, err
+	}
+	if err := s.appendRevision(*page, "publish"); err != nil {
+		return nil, err
+	}
+	cp := *page
+	return &cp, nil
+}
+
+func (s *DiskStore) SetSitePrimaryPage(siteID, pageID string) (*Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, ok := s.sites[siteID]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	page, ok := s.pages[pageID]
+	if !ok || page.SiteID != siteID {
+		return nil, os.ErrNotExist
+	}
+	site.PrimaryPageID = pageID
+	site.UpdatedAt = time.Now()
+	if err := s.saveSites(); err != nil {
+		return nil, err
+	}
+	cp := *site
+	return &cp, nil
+}
+
+func (s *DiskStore) ApplyTemplateToSite(siteID, templateID string) (*Page, *Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, ok := s.sites[siteID]
+	if !ok {
+		return nil, nil, os.ErrNotExist
+	}
+	if _, ok := s.templates[templateID]; !ok {
+		return nil, nil, os.ErrNotExist
+	}
+	site.TemplateID = templateID
+	site.UpdatedAt = time.Now()
+
+	pageID := site.PrimaryPageID
+	if pageID == "" {
+		pageID = randomID()
+		site.PrimaryPageID = pageID
+	}
+	page := Page{
+		ID:            pageID,
+		SiteID:        siteID,
+		Name:          site.Name + " 首页",
+		Slug:          ensureUniqueSlug(slugify(site.Name), s.pages, pageID),
+		Title:         site.Name,
+		TemplateID:    templateID,
+		Status:        "draft",
+		SchemaVersion: 2,
+		SEO: PageSEO{
+			Title:       site.Name,
+			Description: site.Name + " 官网首页",
+		},
+		Sections:  buildTemplateSections(templateID, site.Name),
+		UpdatedAt: time.Now(),
+	}
+	page.normalizeSections()
+	s.pages[page.ID] = &page
+
+	if err := s.saveSites(); err != nil {
+		return nil, nil, err
+	}
+	if err := s.savePages(); err != nil {
+		return nil, nil, err
+	}
+	if err := s.appendRevision(page, "apply_template"); err != nil {
+		return nil, nil, err
+	}
+	pageCopy := page
+	siteCopy := *site
+	return &pageCopy, &siteCopy, nil
+}
+
+func (s *DiskStore) SaveComplianceMaterial(siteID, materialType, fileName string, body []byte) (*ComplianceMaterial, *Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, ok := s.sites[siteID]
+	if !ok {
+		return nil, nil, os.ErrNotExist
+	}
+	safeName := sanitizeFileName(fileName)
+	storedName := siteID + "-" + randomID()[:6] + "-" + safeName
+	storedPath := filepath.Join(s.uploadsDir, storedName)
+	if err := os.WriteFile(storedPath, body, 0o644); err != nil {
+		return nil, nil, err
+	}
+	material := ComplianceMaterial{
+		ID:         randomID(),
+		Type:       strings.TrimSpace(materialType),
+		FileName:   fileName,
+		FilePath:   storedPath,
+		PublicURL:  "/uploads/" + storedName,
+		Status:     "uploaded",
+		UploadedAt: time.Now(),
+	}
+	if material.Type == "" {
+		material.Type = "general"
+	}
+	site.Compliance.Materials = append([]ComplianceMaterial{material}, site.Compliance.Materials...)
+	site.Compliance.ReviewStatus = "materials_uploaded"
+	now := time.Now()
+	site.Compliance.LastSubmittedAt = &now
+	site.UpdatedAt = time.Now()
+	if err := s.saveSites(); err != nil {
+		return nil, nil, err
+	}
+	matCopy := material
+	siteCopy := *site
+	return &matCopy, &siteCopy, nil
+}
+
+func (s *DiskStore) ReviewCompliance(siteID, action, note, materialID string) (*Site, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	site, ok := s.sites[siteID]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	now := time.Now()
+	switch strings.TrimSpace(action) {
+	case "submit":
+		site.Compliance.ReviewStatus = "submitted"
+		site.Compliance.LastSubmittedAt = &now
+	case "approve":
+		site.Compliance.ReviewStatus = "approved"
+		site.Compliance.ICPStatus = "approved"
+		site.Compliance.PSBStatus = "approved"
+	case "reject":
+		site.Compliance.ReviewStatus = "rejected"
+		site.Compliance.ReviewNotes = note
+	case "mark_material_verified":
+		for i := range site.Compliance.Materials {
+			if site.Compliance.Materials[i].ID == materialID {
+				site.Compliance.Materials[i].Status = "verified"
+				site.Compliance.Materials[i].ReviewedAt = &now
+				site.Compliance.Materials[i].Note = note
+			}
+		}
+	default:
+		site.Compliance.ReviewStatus = action
+	}
+	site.Compliance.LastReviewedAt = &now
+	site.UpdatedAt = time.Now()
+	if err := s.saveSites(); err != nil {
+		return nil, err
+	}
+	cp := *site
+	return &cp, nil
+}
+
 func (s *DiskStore) loadPages() error {
 	b, err := os.ReadFile(s.pagesPath)
 	if os.IsNotExist(err) {
@@ -371,6 +602,23 @@ func (s *DiskStore) loadSites() error {
 	return nil
 }
 
+func (s *DiskStore) loadRevisions() error {
+	b, err := os.ReadFile(s.revisionsPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var data revisionsFile
+	if err := json.Unmarshal(b, &data); err != nil {
+		log.Printf("[store] read revisions failed, fallback empty: %v", err)
+		return nil
+	}
+	s.revisions = data.Items
+	return nil
+}
+
 func (s *DiskStore) loadTemplates() error {
 	b, err := os.ReadFile(s.templatesPath)
 	if os.IsNotExist(err) {
@@ -405,6 +653,15 @@ func (s *DiskStore) savePages() error {
 		return err
 	}
 	return os.WriteFile(s.pagesPath, b, 0o644)
+}
+
+func (s *DiskStore) saveRevisions() error {
+	payload := revisionsFile{Items: s.revisions}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.revisionsPath, b, 0o644)
 }
 
 func (s *DiskStore) saveSites() error {
@@ -532,6 +789,27 @@ func ensureUniqueSlug(slug string, all map[string]*Page, selfID string) string {
 	}
 }
 
+func (s *DiskStore) appendRevision(page Page, source string) error {
+	version := 1
+	for _, rev := range s.revisions {
+		if rev.PageID == page.ID && rev.Version >= version {
+			version = rev.Version + 1
+		}
+	}
+	revision := PageRevision{
+		ID:        randomID(),
+		PageID:    page.ID,
+		SiteID:    page.SiteID,
+		Version:   version,
+		Status:    page.Status,
+		Source:    source,
+		Snapshot:  page,
+		CreatedAt: time.Now(),
+	}
+	s.revisions = append([]PageRevision{revision}, s.revisions...)
+	return s.saveRevisions()
+}
+
 func (p *Page) normalizeSections() {
 	if len(p.Sections) == 0 && len(p.Blocks) > 0 {
 		p.Sections = []Section{
@@ -558,6 +836,79 @@ func (p *Page) normalizeSections() {
 			normalizeBlock(&section.Blocks[bi])
 		}
 	}
+}
+
+func buildTemplateSections(templateID, siteName string) []Section {
+	switch templateID {
+	case "tpl-product":
+		return []Section{
+			{
+				ID:     "hero-product",
+				Name:   "产品主视觉",
+				Layout: "stack",
+				Blocks: []Block{
+					{Type: "hero", Props: map[string]string{"headline": siteName + " 产品方案"}},
+					{Type: "text", Props: map[string]string{"text": "为企业提供高效、可信、可发布的网站解决方案。"}},
+					{Type: "button", Props: map[string]string{"label": "申请演示"}},
+				},
+			},
+			{
+				ID:     "features",
+				Name:   "产品特性",
+				Layout: "grid",
+				Blocks: []Block{
+					{Type: "text", Props: map[string]string{"text": "低代码拖拽"}},
+					{Type: "text", Props: map[string]string{"text": "模板快速套用"}},
+					{Type: "text", Props: map[string]string{"text": "备案流程支持"}},
+				},
+			},
+		}
+	default:
+		return []Section{
+			{
+				ID:     "hero-site",
+				Name:   "官网主视觉",
+				Layout: "stack",
+				Blocks: []Block{
+					{Type: "hero", Props: map[string]string{"headline": siteName + " 欢迎页"}},
+					{Type: "text", Props: map[string]string{"text": "这是自动套用模板生成的首页。"}},
+					{Type: "button", Props: map[string]string{"label": "立即联系"}},
+				},
+			},
+			{
+				ID:     "intro",
+				Name:   "介绍区域",
+				Layout: "stack",
+				Blocks: []Block{
+					{Type: "text", Props: map[string]string{"text": siteName + " 提供值得信赖的服务与交付能力。"}},
+				},
+			},
+		}
+	}
+}
+
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "file.bin"
+	}
+	var out bytes.Buffer
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			out.WriteRune(r)
+		case r == '.', r == '-', r == '_':
+			out.WriteRune(r)
+		default:
+			out.WriteRune('-')
+		}
+	}
+	result := out.String()
+	result = strings.Trim(result, "-")
+	if result == "" {
+		return "file.bin"
+	}
+	return result
 }
 
 func normalizeBlock(b *Block) {
